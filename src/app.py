@@ -5,7 +5,7 @@ A super simple FastAPI application that allows students to view and sign up
 for extracurricular activities at Mergington High School.
 """
 
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 import hashlib
@@ -14,9 +14,15 @@ import os
 import secrets
 from pathlib import Path
 from typing import Optional
+from pydantic import BaseModel
 
 app = FastAPI(title="Mergington High School API",
               description="API for viewing and signing up for extracurricular activities")
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 # Mount the static files directory
 current_dir = Path(__file__).parent
@@ -168,19 +174,30 @@ def unregister_from_activity(
 
 
 @app.post("/login")
-def login(username: str, password: str):
+def login(
+    credentials: LoginRequest,
+    username: Optional[str] = Query(default=None),
+    password: Optional[str] = Query(default=None),
+):
     """Authenticate a teacher and return a session token"""
-    teacher = teachers.get(username)
+    # Disallow credentials in the query string to avoid leaking them via URLs/logs
+    if username is not None or password is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Credentials must be sent in the request body, not the query string",
+        )
+
+    teacher = teachers.get(credentials.username)
     if not teacher:
         raise HTTPException(status_code=401, detail="Invalid username or password")
     expected_hash = hashlib.pbkdf2_hmac(
-        "sha256", password.encode(), teacher["salt"].encode(), 100000
+        "sha256", credentials.password.encode(), teacher["salt"].encode(), 100000
     ).hex()
     if not secrets.compare_digest(expected_hash, teacher["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid username or password")
     token = secrets.token_hex(32)
-    sessions[token] = username
-    return {"token": token, "username": username}
+    sessions[token] = credentials.username
+    return {"token": token, "username": credentials.username}
 
 
 @app.post("/logout")
