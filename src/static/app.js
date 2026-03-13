@@ -313,3 +313,125 @@ document.addEventListener("DOMContentLoaded", () => {
     fetchActivities();
   }
 });
+
+// ---- Animated Git-branch background ----
+(function () {
+  const canvas = document.getElementById("git-bg");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+
+  // Lime-green palette for branch lanes
+  const LANE_COLORS = ["#388e3c", "#4caf50", "#76ff03", "#8bc34a", "#2e7d32"];
+  const LANE_SPACING = 40; // px between lanes
+  const COMMIT_RADIUS = 5;
+  const SCROLL_SPEED = 0.4; // px per frame
+
+  let W, H, numLanes;
+  let scrollOffset = 0;
+
+  // Each commit: { lane, y, id }
+  // Each edge:   { fromId, toId }  (connects two commits)
+  const commits = [];
+  const edges = [];
+
+  function buildGraph() {
+    commits.length = 0;
+    edges.length = 0;
+
+    numLanes = Math.max(3, Math.floor(W / LANE_SPACING / 3));
+    const rowSpacing = 60;
+    const rows = Math.ceil(H / rowSpacing) + 10;
+
+    // Start all lanes with an initial commit
+    const headIds = [];
+    for (let lane = 0; lane < numLanes; lane++) {
+      const id = commits.length;
+      commits.push({ lane, y: -rowSpacing * (rows + 2) + lane * 15 });
+      headIds.push(id);
+    }
+
+    for (let row = 1; row < rows * 3; row++) {
+      const y = -rowSpacing * (rows + 2) + row * rowSpacing;
+      for (let lane = 0; lane < numLanes; lane++) {
+        const id = commits.length;
+        commits.push({ lane, y });
+
+        // Connect to same-lane previous commit
+        edges.push({ fromId: headIds[lane], toId: id });
+
+        // Occasionally add a branch from a neighboring lane
+        if (Math.random() < 0.08 && numLanes > 1) {
+          const neighborLane = lane === 0 ? 1 : lane - 1;
+          edges.push({ fromId: headIds[neighborLane], toId: id });
+        }
+
+        headIds[lane] = id;
+      }
+    }
+  }
+
+  function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    buildGraph();
+  }
+
+  function laneX(lane) {
+    // Center the lanes in the viewport
+    const totalWidth = (numLanes - 1) * LANE_SPACING;
+    const startX = (W - totalWidth) / 2;
+    return startX + lane * LANE_SPACING;
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    scrollOffset = (scrollOffset + SCROLL_SPEED) % (60 * 3); // loop every ~180px
+
+    // Draw edges
+    edges.forEach(({ fromId, toId }) => {
+      const a = commits[fromId];
+      const b = commits[toId];
+      const y1 = a.y + scrollOffset;
+      const y2 = b.y + scrollOffset;
+      if (y1 > H + 20 || y2 < -20) return;
+
+      const color = LANE_COLORS[a.lane % LANE_COLORS.length];
+      ctx.beginPath();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.moveTo(laneX(a.lane), y1);
+      // Bezier curve for branch/merge lines
+      if (a.lane !== b.lane) {
+        ctx.bezierCurveTo(
+          laneX(a.lane), y1 + 20,
+          laneX(b.lane), y2 - 20,
+          laneX(b.lane), y2
+        );
+      } else {
+        ctx.lineTo(laneX(b.lane), y2);
+      }
+      ctx.stroke();
+    });
+
+    // Draw commit dots
+    commits.forEach((c) => {
+      const y = c.y + scrollOffset;
+      if (y < -10 || y > H + 10) return;
+      const color = LANE_COLORS[c.lane % LANE_COLORS.length];
+      ctx.beginPath();
+      ctx.arc(laneX(c.lane), y, COMMIT_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    });
+
+    requestAnimationFrame(draw);
+  }
+
+  resize();
+  window.addEventListener("resize", resize);
+  draw();
+})();
