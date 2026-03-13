@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import secrets
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 from pydantic import BaseModel
@@ -34,18 +35,73 @@ teachers_file = Path(__file__).parent / "teachers.json"
 with open(teachers_file) as f:
     teachers = json.load(f)
 
-# In-memory session store: {token: username}
+# In-memory session store.
+# Sessions may be stored in one of two formats:
+#   - Legacy: {token: username}
+#   - New:    {token: {"username": str, "created_at": datetime, "expires_at": datetime}}
+# This allows us to introduce TTL without breaking existing code that writes plain usernames.
 sessions: dict = {}
+
+# Session time-to-live (TTL) in seconds (e.g., 8 hours)
+SESSION_TTL_SECONDS = 60 * 60 * 8
+
+
+def _is_session_expired(session_value) -> bool:
+    """Return True if the given session metadata is expired."""
+    if not isinstance(session_value, dict):
+        # Legacy format has no explicit expiry; treat as not expired here.
+        return False
+    expires_at = session_value.get("expires_at")
+    if not isinstance(expires_at, datetime):
+        return False
+    now = datetime.now(timezone.utc)
+    return now > expires_at
 
 
 def verify_teacher(authorization: Optional[str]):
     """Validate a Bearer token and return the username."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")
+
     token = authorization.split(" ", 1)[1]
-    if token not in sessions:
+
+    # Opportunistically prune expired sessions
+    now = datetime.now(timezone.utc)
+    expired_tokens = []
+    for t, value in list(sessions.items()):
+        if _is_session_expired(value):
+            expired_tokens.append(t)
+    for t in expired_tokens:
+        sessions.pop(t, None)
+
+    session_value = sessions.get(token)
+    if session_value is None:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
-    return sessions[token]
+
+    # If the session is in legacy format (a plain username string), convert it
+    # to the new metadata format on first successful verification.
+    if isinstance(session_value, str):
+        username = session_value
+        sessions[token] = {
+            "username": username,
+            "created_at": now,
+            "expires_at": now + timedelta(seconds=SESSION_TTL_SECONDS),
+        }
+        return username
+
+    # New structured format: enforce expiry.
+    if _is_session_expired(session_value):
+        # Remove the expired session and reject the request.
+        sessions.pop(token, None)
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+    username = session_value.get("username")
+    if not isinstance(username, str):
+        # Malformed session; remove it and reject.
+        sessions.pop(token, None)
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+    return username
 
 
 # In-memory activity database
