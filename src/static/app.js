@@ -49,12 +49,22 @@ document.addEventListener("DOMContentLoaded", () => {
   authBtn.addEventListener("click", async () => {
     if (isLoggedIn()) {
       // Logout
-      await fetch("/logout", {
-        method: "POST",
-        headers: authHeaders(),
-      });
-      sessionStorage.removeItem("authToken");
-      updateAuthUI(null);
+      try {
+        const response = await fetch("/logout", {
+          method: "POST",
+          headers: authHeaders(),
+        });
+        if (!response.ok) {
+          // Optionally log server-side logout failure for debugging
+          console.error("Logout request failed with status", response.status);
+        }
+      } catch (error) {
+        // Ensure client-side logout still occurs even if the network request fails
+        console.error("Network error during logout:", error);
+      } finally {
+        sessionStorage.removeItem("authToken");
+        updateAuthUI(null);
+      }
     } else {
       loginModal.classList.remove("hidden");
       document.getElementById("login-username").focus();
