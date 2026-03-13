@@ -22,10 +22,45 @@
 
     <main>
       <section id="activities-container">
-        <h3>Available Activities</h3>
-        <div id="activities-list">
-          <!-- Activities will be loaded here -->
-          <p>Loading activities...</p>
+        <div class="section-toolbar">
+          <div>
+            <h3>Explore Activities</h3>
+            <p class="section-subtitle">Switch between a weekly timetable and the original list view.</p>
+          </div>
+          <div class="view-toggle" role="tablist" aria-label="Activity views">
+            <button id="timetable-view-btn" class="view-toggle-btn active" type="button" aria-pressed="true">Timetable</button>
+            <button id="list-view-btn" class="view-toggle-btn" type="button" aria-pressed="false">List</button>
+          </div>
+        </div>
+
+        <div id="timetable-view" class="view-panel">
+          <div class="timetable-layout">
+            <div class="timetable-scroll">
+              <div id="timetable-grid" class="timetable-grid">
+                <p>Loading timetable...</p>
+              </div>
+            </div>
+
+            <aside id="timetable-detail" class="timetable-detail">
+              <h4>Activity Details</h4>
+              <p id="timetable-detail-empty" class="detail-empty">
+                Select an activity in the timetable to view details.
+              </p>
+              <div id="timetable-detail-content" class="hidden">
+                <h5 id="detail-name"></h5>
+                <p id="detail-description"></p>
+                <p><strong>Schedule:</strong> <span id="detail-schedule"></span></p>
+                <p><strong>Availability:</strong> <span id="detail-availability"></span></p>
+                <button id="detail-signup-btn" type="button">Register This Activity</button>
+              </div>
+            </aside>
+          </div>
+        </div>
+
+        <div id="list-view" class="view-panel hidden">
+          <div id="activities-list">
+            <p>Loading activities...</p>
+          </div>
         </div>
       </section>
 
